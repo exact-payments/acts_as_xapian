@@ -132,16 +132,19 @@ Specify an array quadruple of [ field, identifier, prefix, type ] where
 e.g. :values => [ [ :created_at, 0, "created_at", :date ],
 [ :size, 1, "size", :string ] ]
 
-* :terms, things which come with a prefix (before a :) in search queries. 
-Specify an array triple of [ field, char, prefix ] where 
+* :terms, things which come with a prefix (before a :) in search queries.
+Specify an array triple of [ field, char, prefix, true/false ] where 
 ** char is an arbitary single upper case char used in the Xapian database, just
 pick any single uppercase character, but use a different one for each prefix.
 ** prefix is the part to use in search queries that goes before the :
 For example, if you were making Google and indexing to be able to later do a
 query like "site:www.whatdotheyknow.com", then the prefix would be "site".
+** true/false (optional): whether or not to allow wildcards when searching
+this term. Defaults to false. (See section g below for details)
 
-e.g. :terms => [ [ :variety, 'V', "variety" ] ]
-        
+e.g. :terms => [ [ :variety, 'V', "variety" ] ], or 
+     :terms => [ [ :variety, 'V', "variety", false ] ]
+
 A 'field' is a symbol referring to either an attribute or a function which
 returns the text, date or number to index. Both 'identifier' and 'char' must be
 the same for the same prefix in different models.
@@ -232,9 +235,46 @@ under RAILS_ROOT/config. As is familiar from the format of the database.yml file
 :test and :production sections are expected.
 
 The following options are available:
-* base_db_path - specifies the directory, relative to RAILS_ROOT, in which acts_as_xapian stores its DBs
+* base_db_path - specifies the directory, relative to RAILS_ROOT, in which acts_as_xapian stores its DBs. Defaults
+to vendor/plugins/acts_as_xapian/xapiandbs
 
-g. Support
+g. Wilcards & Prefixed Terms
+============================
+
+In a Rails environment, if you only want to search within certain fields of a model, the recommended way
+to do this with acts_as_xapian is to configure those fields as terms. However, the default behaviour will
+not allow you to use a wildcard when searching a prefixed term.
+
+For example, let's say you had model Fruit which has two attributes, :name and :description, with the following
+configuration and data:
+
+acts_as_xapian :texts => [:name, :description],
+               :terms => [ [:name, 'N', 'name'], [:description, 'D', 'desc']]
+               
+Fruit.create(:name => "Orange", :description => "I am not a Banana")
+Fruit.create(:name => "Banana", :description => "I am not an Orange")
+
+Now you can do queries like:
+
+ActsAsXapian::Search.new([Fruit], "desc:banana", :limit => 10)
+
+which will only return those Fruits which have the word "banana" in their description field.
+
+Now, adding a wildcarded term will fail...
+>> ActsAsXapian::Search.new([Fruit], "desc:banana", :limit => 10).results.size
+=> 1
+>> ActsAsXapian::Search.new([Fruit], "desc:ban*", :limit => 10).results.size
+=> 0
+
+...so to avoid this we enable wildcard searching for the description term:
+
+acts_as_xapian :texts => [:name, :description],
+               :terms => [ [:name, 'N', 'name'], [:description, 'D', 'desc', true]]
+
+>> ActsAsXapian::Search.new([Fruit], "desc:ban*", :limit => 10).results.size
+=> 1
+
+h. Support
 ==========
 
 Please ask any questions on the 
